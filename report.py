@@ -19,6 +19,7 @@ from scipy.sparse import hstack
 N=300000 # Training dataset size
 M=30000  # Test dataset size
 
+print 'Loading dataframes from CSV'
 df = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
 df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
 df_test = df[N+1:N+M+1]
@@ -26,12 +27,10 @@ df = df[:N]
 
 profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
 profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
-profiles.columns = [col + '1' for col in profiles_columns]
-df = df.merge(profiles, on='profile1')
-df_test = df_test.join(profiles, on='profile1')
-profiles.columns = [col + '2' for col in profiles_columns]
-df = df.merge(profiles, on='profile2')
-df_test = df_test.join(profiles, on='profile2')
+for user in ('1','2'):
+  profiles.columns = [col+user for col in profiles_columns]
+  df = df.merge(profiles, on='profile'+user)
+  df_test = df_test.merge(profiles, on='profile'+user)
 
 
 hasher = FeatureHasher()
@@ -42,60 +41,60 @@ v2 = CountVectorizer()
 v3 = CountVectorizer()
 
 def parse(df):
+    print 'Parsing columns'
     #convert conversation to dict
-    for i in [12,13,'about','about2']:
+    for i in ['words1', 'words2','about1','about2']:
         df.ix[:,i] = df.ix[:,i].apply(json.loads)
-    df['about_empty'] = (df.about=={}).astype(int)
+    df['about1_empty'] = (df.about1=={}).astype(int)
     df['about2_empty'] = (df.about2=={}).astype(int)
-    #convert string gender to 0/1 field
-    df.ix[:,18] = (df.ix[:,18]=='M').astype(int)
-    df.ix[:,25] = (df.ix[:,25]=='M').astype(int)
-    #replace None ages with 0
-    #TODO is 0 a good choice?
-    df.ix[:,17][df.ix[:,17]=='None'] = 0
-    df.ix[:,24][df.ix[:,24]=='None'] = 0
-    df.ix[:,17] = df.ix[:,17].astype(int)
-    df.ix[:,24] = df.ix[:,24].astype(int)
-    df['gender_eq'] = (df.gender==df.gender2).astype(int)
-    df['age_diff'] = (df.age.astype(int)-df.age2.astype(int)).abs()
-    df['u1al'] = df.about.apply(len)
+    for user in ('1','2'):
+      #convert string gender to 0/1 field
+      df.ix[:,'gender'+user] = (df.ix[:,'gender'+user]=='M').astype(int)
+      #replace None ages with 0
+      #TODO is 0 a good choice?
+      df.ix[:,'age'+user][df.ix[:,'age'+user]=='None'] = 0
+      df.ix[:,'age'+user] = df.ix[:,'age'+user].astype(int)
+    df['gender_eq'] = (df.gender1==df.gender2).astype(int)
+    df['age_diff'] = (df.age1.astype(int)-df.age2.astype(int)).abs()
+    df['u1al'] = df.about1.apply(len)
     df['u2al'] = df.about2.apply(len)
 
-    g = df.ix[:,[1,10]].groupby(1)
-    avg_conv = g.sum().astype(float).div(g.count().ix[:,10], axis=0)
-    avg_conv.columns = ['avg_conv']
-    df = df.join(avg_conv, on=1)
-    g = df.ix[:,[2,11]].groupby(2)
-    avg_conv = g.sum().astype(float).div(g.count().ix[:,11], axis=0)
-    avg_conv.columns = ['avg_conv2']
-    df = df.join(avg_conv, on=2)
-
+    # compute average conversation length for each user: (sum numlines)/(count conversations)
+    for user in ('1','2'):
+      g = df.ix[:,['user'+user,'numlines'+user]].groupby('user'+user)
+      avg_conv = g.sum().astype(float).div(g.count().ix[:,'numlines'+user], axis=0)
+      avg_conv.columns = ['avg_conv'+user]
+      df = df.join(avg_conv, on='user'+user)
     return df
 
 def extract(df):
-    v.fit(df.ix[:,1].values + df.ix[:,2].values)
-    v2.fit(df.ix[:,3].values + df.ix[:,4].values)
+    print 'Extracting features'
+    v.fit(df.ix[:,'user1'].values + df.ix[:,'user2'].values)
+    v2.fit(df.ix[:,'profile1'].values + df.ix[:,'profile2'].values)
+    import ipdb
+    ipdb.set_trace()
     Xs = (
-        hstack([v.transform(df.ix[:,1]),
-            v.transform(df.ix[:,2]),
+        hstack([v.transform(df.ix[:,'user1']),
+            v.transform(df.ix[:,'user2']),
         ]),
-        hstack([v2.transform(df.ix[:,3]),
-            v2.transform(df.ix[:,4]),
+        hstack([v2.transform(df.ix[:,'profile1']),
+            v2.transform(df.ix[:,'profile2']),
         ]),
-        df.ix[:,[10,11]].astype(int).values,
-        df.ix[:,[17,18]].astype(int).values,
-        df.ix[:,[24,25]].astype(int).values,
-        df.ix[:,['avg_conv','avg_conv2']].values,
-        df.ix[:,['about_empty','about2_empty']].values,
+        df.ix[:,['numlines1','numlines2']].astype(int).values,
+        # TODO: wait, I think this was off by 1 before?
+        df.ix[:,['age1','gender1']].astype(int).values,
+        df.ix[:,['age2','gender2']].astype(int).values,
+        df.ix[:,['avg_conv1','avg_conv2']].values,
+        df.ix[:,['about_empty1','about2_empty']].values,
         df.ix[:,['gender_eq', 'age_diff']].values,
         df.ix[:,['u1al', 'u2al']].values,
-        hstack([d.fit_transform(df.ix[:,12]),
-            d.fit_transform(df.ix[:,13]),
+        hstack([d.fit_transform(df.ix[:,'words1']),
+            d.fit_transform(df.ix[:,'words2']),
         ]),
-        hstack([d.fit_transform(df.about),
+        hstack([d.fit_transform(df.about1),
             d.fit_transform(df.about2),
         ]),
-        tfidf.fit_transform(hstack([v3.fit_transform(df.location),
+        tfidf.fit_transform(hstack([v3.fit_transform(df.location1),
             v3.fit_transform(df.location2)
         ])),
         )
@@ -104,6 +103,7 @@ def extract(df):
 
 def response(df):
     return (df.ix[:,8]!='null').values
+
 
 df = parse(df)
 X, Xs = extract(df)
@@ -132,11 +132,11 @@ from sklearn import cross_validation
 #print cross_validation.cross_val_score(clf, Xs[0], y_train, cv=10,
         #scoring='f1', verbose=2, n_jobs=8)
 
-# predict the 'f' field
-df['u1'] = df[1].apply(lambda s: int(s.split(':')[1]))
-df['u2'] = df[2].apply(lambda s: int(s.split(':')[1]))
-df['p1'] = df[3].apply(lambda s: int(s.split(':')[1]))
-df['p2'] = df[4].apply(lambda s: int(s.split(':')[1]))
+# predict the friends 'f' field
+df['u1'] = df['user1'].apply(lambda s: int(s.split(':')[1]))
+df['u2'] = df['user2'].apply(lambda s: int(s.split(':')[1]))
+df['p1'] = df['profile1'].apply(lambda s: int(s.split(':')[1]))
+df['p2'] = df['profile2'].apply(lambda s: int(s.split(':')[1]))
 from sklearn import preprocessing
 le = preprocessing.LabelEncoder()
 df['f'] = le.fit_transform(df[14])
@@ -147,7 +147,7 @@ dd=df.ix[:,['u1','u2','p1','p2','age','gender','location_flag',
         #scoring='f1', n_jobs=5)
 
 # predict user quality
-users = pd.read_table('tmp/new_users_dataset.csv', sep=';', header=None,
+users = pd.read_table('data/new_users_dataset.csv', sep=';', header=None,
         index_col=0)
 users.columns = ['quality']
 dfq = df.join(users, on=1, how='inner')
