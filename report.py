@@ -1,20 +1,37 @@
+#!/usr/bin/python
+# Arpad Kovacs <akovacs@stanford.edu>
+# Daniel Velkov <dvelkov@stanford.edu>
+# Aditya Somani <asomani@stanford.edu>
+# CS229 Final Project - Feature Importer
+
+#from collections import Counter
+#from pylab import *
+#import random
+
 import pandas as pd
 from sklearn.feature_extraction import *
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_score, recall_score, f1_score
 
-N=2000000
-M=200000
-df = pd.read_table('chats', sep=';', header=None, nrows=N+M+1)
-df_test = df[N+1:N+M]
+N=300000 # Training dataset size
+M=30000  # Test dataset size
+
+
+df = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
+df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
+df_test = df[N+1:N+M+1]
 df = df[:N]
-p = pd.read_table('profiles_dataset.csv', sep=';', index_col=0)
-df = df.join(p, on=3)
-df_test = df_test.join(p, on=3)
-p.columns = [c + '2' for c in p.columns]
-df = df.join(p, on=4)
-df_test = df_test.join(p, on=4)
+
+profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
+profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
+profiles.columns = [col + '1' for col in profiles_columns]
+df = df.merge(profiles, on='profile1')
+df_test = df_test.join(profiles, on='profile1')
+profiles.columns = [col + '2' for col in profiles_columns]
+df = df.merge(profiles, on='profile2')
+df_test = df_test.join(profiles, on='profile2')
+
 
 hasher = FeatureHasher()
 d = DictVectorizer()
@@ -23,6 +40,8 @@ v2 = CountVectorizer()
 
 from scipy.sparse import hstack, vstack
 import json
+import ipdb
+ipdb.set_trace()
 v.fit(df.ix[:,1].values + df.ix[:,2].values)
 v2.fit(df.ix[:,3].values + df.ix[:,4].values)
 #convert conversation to dicts
