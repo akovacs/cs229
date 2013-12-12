@@ -25,7 +25,7 @@ stopwords_df.columns=['word','index']
 stopwords=set('word:'+stopwords_df['index'])
 
 df = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
-df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
+df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2','friends']
 df_test = df[N+1:N+M+1]
 df = df[:N]
 
@@ -88,12 +88,12 @@ def extract(df):
     v2.fit(df.ix[:,'profile1'].values + df.ix[:,'profile2'].values)
     Xs = (
         # TODO: 'float' object has no attribute 'lower'???
-        #hstack([v.transform(df.ix[:,'user1']),
-        #    v.transform(df.ix[:,'user2']),
-        #]),
-        #hstack([v2.transform(df.ix[:,'profile1']),
-        #    v2.transform(df.ix[:,'profile2']),
-        #]),
+        hstack([v.transform(df.ix[:,'user1']),
+            v.transform(df.ix[:,'user2']),
+        ]),
+        hstack([v2.transform(df.ix[:,'profile1']),
+            v2.transform(df.ix[:,'profile2']),
+        ]),
         df.ix[:,['numlines1','numlines2']].astype(int).values,
         # TODO: wait, I think this was off by 1 before?
         df.ix[:,['age1','gender1']].astype(int).values,
@@ -153,11 +153,10 @@ df['p1'] = df['profile1'].apply(lambda s: int(s.split(':')[1]))
 df['p2'] = df['profile2'].apply(lambda s: int(s.split(':')[1]))
 from sklearn import preprocessing
 le = preprocessing.LabelEncoder()
-# TODO: this does not exist in the gold dataset???
-#df['f'] = le.fit_transform(df[14])
+df['f'] = le.fit_transform(df['friends'])
 dd=df.ix[:,['u1','u2','p1','p2','age','gender','location_flag',
     'u1al','age2','gender2','location_flag2','u2al','age_diff',
-    'gender_eq']].astype(int)
+    'gender_eq', 'f']].astype(int)
 #cross_validation.cross_val_score(clf, dd.ix[:,:14], dd.ix[:,14], cv=10,
         #scoring='f1', n_jobs=5)
 
