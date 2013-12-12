@@ -20,6 +20,10 @@ N=300000 # Training dataset size
 M=30000  # Test dataset size
 
 print 'Loading dataframes from CSV'
+stopwords_df = pd.read_csv("data/stopwords.txt", header=None, delimiter="\s+->\s+")
+stopwords_df.columns=['word','index']
+stopwords=set('word:'+stopwords_df['index'])
+
 df = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
 df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
 df_test = df[N+1:N+M+1]
@@ -40,11 +44,19 @@ v = CountVectorizer()
 v2 = CountVectorizer()
 v3 = CountVectorizer()
 
+# convert json string to dict and remove keys corresponding to stopwords
+def stripStopWords(jsonString):
+    wordsDict = json.loads(jsonString)
+    for stopword in set(wordsDict.keys()).intersection(stopwords):
+        del wordsDict[stopword]
+    return wordsDict
+
 def parse(df):
     print 'Parsing columns'
-    #convert conversation to dict
+    #convert conversation to dict, filter out stopwords
     for i in ['words1', 'words2','about1','about2']:
-        df.ix[:,i] = df.ix[:,i].apply(json.loads)
+        df.ix[:,i] = df.ix[:,i].apply(stripStopWords)
+        #df.ix[:,i] = df.ix[:,i].apply(json.loads)
     df['about1_empty'] = (df.about1=={}).astype(int)
     df['about2_empty'] = (df.about2=={}).astype(int)
     for user in ('1','2'):
@@ -65,21 +77,23 @@ def parse(df):
       avg_conv = g.sum().astype(float).div(g.count().ix[:,'numlines'+user], axis=0)
       avg_conv.columns = ['avg_conv'+user]
       df = df.join(avg_conv, on='user'+user)
+
+    # compute number of words that users' about descriptions have in common
+    df['about_shared'] = df[['about1','about2']][0:10].apply(lambda row: len(set(row['about1'].keys()).intersection(set(row['about2'].keys()))), axis=1)
     return df
 
 def extract(df):
     print 'Extracting features'
     v.fit(df.ix[:,'user1'].values + df.ix[:,'user2'].values)
     v2.fit(df.ix[:,'profile1'].values + df.ix[:,'profile2'].values)
-    import ipdb
-    ipdb.set_trace()
     Xs = (
-        hstack([v.transform(df.ix[:,'user1']),
-            v.transform(df.ix[:,'user2']),
-        ]),
-        hstack([v2.transform(df.ix[:,'profile1']),
-            v2.transform(df.ix[:,'profile2']),
-        ]),
+        # TODO: 'float' object has no attribute 'lower'???
+        #hstack([v.transform(df.ix[:,'user1']),
+        #    v.transform(df.ix[:,'user2']),
+        #]),
+        #hstack([v2.transform(df.ix[:,'profile1']),
+        #    v2.transform(df.ix[:,'profile2']),
+        #]),
         df.ix[:,['numlines1','numlines2']].astype(int).values,
         # TODO: wait, I think this was off by 1 before?
         df.ix[:,['age1','gender1']].astype(int).values,
@@ -139,10 +153,11 @@ df['p1'] = df['profile1'].apply(lambda s: int(s.split(':')[1]))
 df['p2'] = df['profile2'].apply(lambda s: int(s.split(':')[1]))
 from sklearn import preprocessing
 le = preprocessing.LabelEncoder()
-df['f'] = le.fit_transform(df[14])
+# TODO: this does not exist in the gold dataset???
+#df['f'] = le.fit_transform(df[14])
 dd=df.ix[:,['u1','u2','p1','p2','age','gender','location_flag',
     'u1al','age2','gender2','location_flag2','u2al','age_diff',
-    'gender_eq','f']].astype(int)
+    'gender_eq']].astype(int)
 #cross_validation.cross_val_score(clf, dd.ix[:,:14], dd.ix[:,14], cv=10,
         #scoring='f1', n_jobs=5)
 
