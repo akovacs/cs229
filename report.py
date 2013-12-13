@@ -29,8 +29,6 @@ stopwords=set('word:'+stopwords_df['index'])
 
 df_full = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None)
 df_full.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
-import ipdb
-ipdb.set_trace()
 # shuffle chats (they were originally in chronological order)
 df_full = df_full.reindex(np.random.permutation(df_full.index))
 
