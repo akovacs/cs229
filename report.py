@@ -113,15 +113,16 @@ for user in ('1','2'):
     profiles.columns = [col+user for col in profiles_columns]
     df_full = df_full.merge(profiles, on='profile'+user)
 del profiles
-del stopwords
 df_full = parse(df_full)
+del stopwords
+del stopwords_df
 best_scores=[]
 
 N=300000 # Training dataset size
 M=30000  # Test dataset size
 iterations=100 # Number of gradient descent iterations to run
 # Train and test learning curves
-trainTestSizes=[(50000,5000),(100000,10000),(200000,20000),(300000,30000)]
+trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
 numIterations=np.arange(0,100,10)
 for (N, M) in trainTestSizes:
 #for iterations in numIterations:
