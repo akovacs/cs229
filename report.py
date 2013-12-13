@@ -16,33 +16,18 @@ from sklearn.metrics import precision_score, recall_score, f1_score
 import json
 from scipy.sparse import hstack
 
-N=300000 # Training dataset size
-M=30000  # Test dataset size
+#N=300000 # Training dataset size
+#M=30000  # Test dataset size
 
 print 'Loading dataframes from CSV'
 stopwords_df = pd.read_csv("data/stopwords.txt", header=None, delimiter="\s+->\s+")
 stopwords_df.columns=['word','index']
 stopwords=set('word:'+stopwords_df['index'])
 
-df = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
-df.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
-df_test = df[N+1:N+M+1]
-df = df[:N]
+df_full = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
+df_full.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
+df_full = parse(df_full)
 
-profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
-profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
-for user in ('1','2'):
-  profiles.columns = [col+user for col in profiles_columns]
-  df = df.merge(profiles, on='profile'+user)
-  df_test = df_test.merge(profiles, on='profile'+user)
-
-
-hasher = FeatureHasher()
-d = DictVectorizer()
-tfidf = TfidfTransformer()
-v = CountVectorizer()
-v2 = CountVectorizer()
-v3 = CountVectorizer()
 
 # convert json string to dict and remove keys corresponding to stopwords
 def stripStopWords(jsonString):
@@ -122,40 +107,62 @@ def response(df):
     return (df.ix[:,8]!='null').values
 
 
-df = parse(df)
-X, Xs = extract(df)
-y_train = response(df)
+best_scores=[]
+# Train and test learning curves
+trainTestSizes=[(50000,5000),(100000,10000),(200000,20000),(300000,30000)]
+for (N, M) in trainTestSizes:
+    print 'Training Set=%d Test Set=%d' % (N,M)
+    df_test = df_full[N+1:N+M+1]
+    df_train = df_full[:N]
+    
+    profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
+    profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
+    for user in ('1','2'):
+        profiles.columns = [col+user for col in profiles_columns]
+        df_train = df_train.merge(profiles, on='profile'+user)
+        df_test = df_test.merge(profiles, on='profile'+user)
+  
+  
+    hasher = FeatureHasher()
+    d = DictVectorizer()
+    tfidf = TfidfTransformer()
+    v = CountVectorizer()
+    v2 = CountVectorizer()
+    v3 = CountVectorizer()
 
-df_test = parse(df_test)
-Xt, Xts = extract(df_test)
-y_test = response(df_test)
-
-from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
-pp = {'alpha': 0.01,
-'loss': 'perceptron',
-'n_iter': 20,
-'penalty': 'l2',
-'power_t': 0.5,
-'class_weight': 'auto'}
-clf = SGDClassifier(**pp)
-
-params={'penalty': ['l1', 'l2'], 'n_iter': [200, 20], 'loss': ['hinge', 'log', 'perceptron'],
-    'alpha': [1e-1, 1e-3, 1e-5, 1e-7, 1e-9], 'power_t': [0.3, 0.5, 0.7],
-    'class_weight': ['auto']}
-gs = RandomizedSearchCV(clf, params, cv=5, scoring='f1', n_jobs=8, n_iter=100,
-        verbose=1)
-from sklearn import cross_validation
-# predict reports
-#print cross_validation.cross_val_score(clf, Xs[0], y_train, cv=10,
-        #scoring='f1', verbose=2, n_jobs=8)
-
-# predict user quality
-users = pd.read_table('data/new_users_dataset.csv', sep=';', header=None,
-        index_col=0)
-users.columns = ['quality']
-dfq = df.join(users, on='user1', how='inner')
-dfq.quality = (dfq.quality=='clean').astype(int)
-Xq, Xqs = extract(dfq)
-# don't use the user columns for predicting the user quality
-gs.fit(hstack(Xqs[2:]), dfq.quality.values)
-print gs.best_score_
+    X, Xs = extract(df_train)
+    y_train = response(df_train)
+    
+    Xt, Xts = extract(df_test)
+    y_test = response(df_test)
+    
+    from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
+    pp = {'alpha': 0.01,
+    'loss': 'perceptron',
+    'n_iter': 20,
+    'penalty': 'l2',
+    'power_t': 0.5,
+    'class_weight': 'auto'}
+    clf = SGDClassifier(**pp)
+    
+    params={'penalty': ['l1', 'l2'], 'n_iter': [200, 20], 'loss': ['hinge', 'log', 'perceptron'],
+        'alpha': [1e-1, 1e-3, 1e-5, 1e-7, 1e-9], 'power_t': [0.3, 0.5, 0.7],
+        'class_weight': ['auto']}
+    gs = RandomizedSearchCV(clf, params, cv=5, scoring='f1', n_jobs=8, n_iter=100,
+            verbose=1)
+    from sklearn import cross_validation
+    # predict reports
+    #print cross_validation.cross_val_score(clf, Xs[0], y_train, cv=10,
+            #scoring='f1', verbose=2, n_jobs=8)
+    
+    # predict user quality
+    users = pd.read_table('data/new_users_dataset.csv', sep=';', header=None,
+            index_col=0)
+    users.columns = ['quality']
+    dfq = df_train.join(users, on='user1', how='inner')
+    dfq.quality = (dfq.quality=='clean').astype(int)
+    Xq, Xqs = extract(dfq)
+    # don't use the user columns for predicting the user quality
+    gs.fit(hstack(Xqs[2:]), dfq.quality.values)
+    best_scores.append(gs.best_score_)
+    print gs.best_score_
