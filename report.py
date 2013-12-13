@@ -19,6 +19,9 @@ from sklearn import cross_validation
 import json
 from scipy.sparse import hstack
 
+import matplotlib.pyplot as plt
+import operator
+
 print 'Loading dataframes from CSV'
 stopwords_df = pd.read_csv("data/stopwords.txt", header=None, delimiter="\s+->\s+")
 stopwords_df.columns=['word','index']
@@ -26,8 +29,10 @@ stopwords=set('word:'+stopwords_df['index'])
 
 df_full = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None)
 df_full.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
+import ipdb
+ipdb.set_trace()
 # shuffle chats (they were originally in chronological order)
-df_full.reindex(np.random.permutation(df_full.index))
+df_full = df_full.reindex(np.random.permutation(df_full.index))
 
 profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
 profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
@@ -182,3 +187,8 @@ for (N, M) in trainTestSizes:
 for (score, (train, test)) in zip(best_scores, trainTestSizes):
     print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
 
+plt.xlabel('Training set size')
+plt.ylabel('F1 score')
+plt.title('Learning curve')
+plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
+plt.savefig('learning_curve.png')
