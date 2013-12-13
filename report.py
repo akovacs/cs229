@@ -8,26 +8,29 @@
 #from pylab import *
 #import random
 
+import numpy as np
 import pandas as pd
 from sklearn.feature_extraction import *
 from sklearn.feature_extraction.text import *
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
+from sklearn import cross_validation
 import json
 from scipy.sparse import hstack
-
-#N=300000 # Training dataset size
-#M=30000  # Test dataset size
 
 print 'Loading dataframes from CSV'
 stopwords_df = pd.read_csv("data/stopwords.txt", header=None, delimiter="\s+->\s+")
 stopwords_df.columns=['word','index']
 stopwords=set('word:'+stopwords_df['index'])
 
-df_full = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None, nrows=N+M+1)
+df_full = pd.read_table('data/new_chats_dataset.csv', sep=';', header=None)
 df_full.columns=['chatid','user1','user2','profile1','profile2','start','end','disconnector','reporteduser','reportedreason','numlines1','numlines2','words1','words2']
-df_full = parse(df_full)
+# shuffle chats (they were originally in chronological order)
+df_full.reindex(np.random.permutation(df_full.index))
 
+profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
+profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
 
 # convert json string to dict and remove keys corresponding to stopwords
 def stripStopWords(jsonString):
@@ -75,7 +78,6 @@ def extract(df):
     v.fit(df.ix[:,'user1'].values + df.ix[:,'user2'].values)
     v2.fit(df.ix[:,'profile1'].values + df.ix[:,'profile2'].values)
     Xs = (
-        # TODO: 'float' object has no attribute 'lower'???
         hstack([v.transform(df.ix[:,'user1']),
             v.transform(df.ix[:,'user2']),
         ]),
@@ -107,22 +109,33 @@ def response(df):
     return (df.ix[:,8]!='null').values
 
 
+for user in ('1','2'):
+    profiles.columns = [col+user for col in profiles_columns]
+    df_full = df_full.merge(profiles, on='profile'+user)
+del profiles
+del stopwords
+df_full = parse(df_full)
 best_scores=[]
+
+N=300000 # Training dataset size
+M=30000  # Test dataset size
+iterations=100 # Number of gradient descent iterations to run
 # Train and test learning curves
 trainTestSizes=[(50000,5000),(100000,10000),(200000,20000),(300000,30000)]
+numIterations=np.arange(0,100,10)
 for (N, M) in trainTestSizes:
+#for iterations in numIterations:
     print 'Training Set=%d Test Set=%d' % (N,M)
     df_test = df_full[N+1:N+M+1]
-    df_train = df_full[:N]
+
+    # hack to avoid out-of-memory
+    df_train=None
+    if N == 300000:
+        df_full=df_full[:N]
+        df_train = df_full
+    else:
+        df_train = df_full[:N]
     
-    profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
-    profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
-    for user in ('1','2'):
-        profiles.columns = [col+user for col in profiles_columns]
-        df_train = df_train.merge(profiles, on='profile'+user)
-        df_test = df_test.merge(profiles, on='profile'+user)
-  
-  
     hasher = FeatureHasher()
     d = DictVectorizer()
     tfidf = TfidfTransformer()
@@ -136,7 +149,6 @@ for (N, M) in trainTestSizes:
     Xt, Xts = extract(df_test)
     y_test = response(df_test)
     
-    from sklearn.grid_search import GridSearchCV, RandomizedSearchCV
     pp = {'alpha': 0.01,
     'loss': 'perceptron',
     'n_iter': 20,
@@ -148,9 +160,8 @@ for (N, M) in trainTestSizes:
     params={'penalty': ['l1', 'l2'], 'n_iter': [200, 20], 'loss': ['hinge', 'log', 'perceptron'],
         'alpha': [1e-1, 1e-3, 1e-5, 1e-7, 1e-9], 'power_t': [0.3, 0.5, 0.7],
         'class_weight': ['auto']}
-    gs = RandomizedSearchCV(clf, params, cv=5, scoring='f1', n_jobs=8, n_iter=100,
+    gs = RandomizedSearchCV(clf, params, cv=5, scoring='f1', n_jobs=8, n_iter=iterations,
             verbose=1)
-    from sklearn import cross_validation
     # predict reports
     #print cross_validation.cross_val_score(clf, Xs[0], y_train, cv=10,
             #scoring='f1', verbose=2, n_jobs=8)
@@ -166,3 +177,7 @@ for (N, M) in trainTestSizes:
     gs.fit(hstack(Xqs[2:]), dfq.quality.values)
     best_scores.append(gs.best_score_)
     print gs.best_score_
+
+for (score, (train, test)) in zip(best_scores, trainTestSizes):
+    print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
+
