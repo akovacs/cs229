@@ -133,14 +133,14 @@ del stopwords
 del stopwords_df
 best_scores=[]
 
-N=100000 # Training dataset size
-M=10000  # Test dataset size
+N=200000 # Training dataset size
+M=20000  # Test dataset size
 #iterations=100 # Number of gradient descent iterations to run
 # Train and test learning curves
-#trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
-numIterations=np.arange(20,500,20)
-#for (N, M) in trainTestSizes:
-for iterations in numIterations:
+trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
+#numIterations=np.arange(20,500,20)
+for (N, M) in trainTestSizes:
+#for iterations in numIterations:
     # temp
     iterations = 100
     print 'Training Set=%d Test Set=%d' % (N,M)
