@@ -201,7 +201,7 @@ for (score, (train, test)) in zip(best_scores, trainTestSizes):
 #for (score, iteration) in zip(best_scores, numIterations):
 #    print 'Iterations=%d  F1 Score=%f' % (iteration, score)
 
-plt.xlabel('Number of iterations')
+plt.xlabel('Sample size')
 plt.ylabel('F1 score')
 plt.title('Learning curve')
 plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
