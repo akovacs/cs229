@@ -33,7 +33,7 @@ df_full.columns=['chatid','user1','user2','profile1','profile2','start','end','d
 df_full = df_full.reindex(np.random.permutation(df_full.index))
 
 profiles = pd.read_table('data/new_profiles_dataset.csv', sep=';', header=None)
-profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname']
+profiles_columns=['profile','location','location_flag','age','gender','created','about','screenname','country']
 
 # convert json string to dict and remove keys corresponding to stopwords
 def stripStopWords(jsonString):
@@ -58,6 +58,7 @@ def parse(df):
       df.ix[:,'age'+user][df.ix[:,'age'+user]=='None'] = 0
       df.ix[:,'age'+user] = df.ix[:,'age'+user].astype(int)
     df['gender_eq'] = (df.gender1==df.gender2).astype(int)
+    df['country_eq'] = (df.country1==df.country2).astype(int)
     df['age_diff'] = (df.age1.astype(int)-df.age2.astype(int)).abs()
     df['u1al'] = df.about1.apply(len)
     df['u2al'] = df.about2.apply(len)
@@ -112,6 +113,17 @@ def response(df):
     return (df.ix[:,8]!='null').values
 
 
+def extractCountry(location):
+    provinceCountry = str(location).split(',')
+    country = provinceCountry[-1]
+    # deal with degenerate cases such as:
+    # ['Dar es Salaam', ' Tanzania', ' United Republic of']
+    # ['Pusan-jikhalsi', ' Korea', ' Republic of']
+    if 'Republic of' in country and len(provinceCountry) > 1:
+        country = provinceCountry[-2]
+    return country
+
+profiles['country'] = profiles[1].apply(extractCountry)
 for user in ('1','2'):
     profiles.columns = [col+user for col in profiles_columns]
     df_full = df_full.merge(profiles, on='profile'+user)
@@ -121,14 +133,16 @@ del stopwords
 del stopwords_df
 best_scores=[]
 
-N=300000 # Training dataset size
-M=30000  # Test dataset size
-iterations=100 # Number of gradient descent iterations to run
+N=100000 # Training dataset size
+M=10000  # Test dataset size
+#iterations=100 # Number of gradient descent iterations to run
 # Train and test learning curves
-trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
-numIterations=np.arange(0,100,10)
-for (N, M) in trainTestSizes:
-#for iterations in numIterations:
+#trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
+numIterations=np.arange(20,500,20)
+#for (N, M) in trainTestSizes:
+for iterations in numIterations:
+    # temp
+    iterations = 100
     print 'Training Set=%d Test Set=%d' % (N,M)
     df_test = df_full[N+1:N+M+1]
 
@@ -181,12 +195,17 @@ for (N, M) in trainTestSizes:
     gs.fit(hstack(Xqs[2:]), dfq.quality.values)
     best_scores.append(gs.best_score_)
     print gs.best_score_
+    print best_scores
 
-for (score, (train, test)) in zip(best_scores, trainTestSizes):
-    print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
+#for (score, (train, test)) in zip(best_scores, trainTestSizes):
+#    print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
 
-plt.xlabel('Training set size')
+for (score, iteration) in zip(best_scores, numIterations):
+    print 'Iterations=%d  F1 Score=%f' % (iteration, score)
+
+plt.xlabel('Number of iterations')
 plt.ylabel('F1 score')
 plt.title('Learning curve')
-plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
+#plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
+plt.plot(numIterations, best_scores,'b.-')
 plt.savefig('learning_curve.png')
