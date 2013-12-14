@@ -135,14 +135,12 @@ best_scores=[]
 
 N=200000 # Training dataset size
 M=20000  # Test dataset size
-#iterations=100 # Number of gradient descent iterations to run
+iterations=100 # Number of gradient descent iterations to run
 # Train and test learning curves
 trainTestSizes=[(train,train/10) for train in range(50000,350000,50000)]
 #numIterations=np.arange(20,500,20)
 for (N, M) in trainTestSizes:
 #for iterations in numIterations:
-    # temp
-    iterations = 100
     print 'Training Set=%d Test Set=%d' % (N,M)
     df_test = df_full[N+1:N+M+1]
 
@@ -197,15 +195,15 @@ for (N, M) in trainTestSizes:
     print gs.best_score_
     print best_scores
 
-#for (score, (train, test)) in zip(best_scores, trainTestSizes):
-#    print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
+for (score, (train, test)) in zip(best_scores, trainTestSizes):
+    print 'Train=%d Test=%d  F1 Score=%f' % (train, test, score)
 
-for (score, iteration) in zip(best_scores, numIterations):
-    print 'Iterations=%d  F1 Score=%f' % (iteration, score)
+#for (score, iteration) in zip(best_scores, numIterations):
+#    print 'Iterations=%d  F1 Score=%f' % (iteration, score)
 
 plt.xlabel('Number of iterations')
 plt.ylabel('F1 score')
 plt.title('Learning curve')
-#plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
-plt.plot(numIterations, best_scores,'b.-')
+plt.plot(map(operator.itemgetter(1), trainTestSizes), best_scores,'b.-')
+#plt.plot(numIterations, best_scores,'b.-')
 plt.savefig('learning_curve.png')
